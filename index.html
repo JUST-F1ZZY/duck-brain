@@ -56,6 +56,7 @@
     <div class="row" style="justify-content:space-between;margin:0"><span>Curiosity</span><b id="meterVal">0%</b></div>
     <div class="bar"><div id="meterFill"></div></div>
     <div id="mood">🦆 waiting</div>
+    <div id="ownerStatus" style="font-size:13px;color:var(--dim)"></div>
   </div>
 </div>
 
@@ -98,7 +99,10 @@ Try: bring Hunter in, Enroll, then turn him around, change his shirt, add a stra
     <input id="ownerName" type="text" value="Hunter" aria-label="Owner name">
     <button id="enroll">Enroll my face</button>
   </div>
-  <pre>Point the camera at yourself (front camera is easiest), press Enroll, then slowly turn your head for ~5 s.</pre>
+  <div class="row"><label class="row" style="margin:0"><span>…or from photos:</span><input id="enrollPhotos" type="file" accept="image/*" multiple style="max-width:220px"></label></div>
+  <pre>Camera: point it at yourself (front camera is easiest), press Enroll, slowly turn your head for ~5 s.
+Photos: pick 5-15 photos of just you (different angles/lighting). They stay on this device.
+Sim world: press Enroll while the cartoon Hunter's face is in view (photos won't match the cartoon).</pre>
 </details>
 
 <details>

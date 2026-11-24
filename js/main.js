@@ -300,9 +300,9 @@ async function enrollStep(visible, now) {
   if (enrolling.samples.length >= 16 || now > enrolling.until) finishEnroll();
 }
 
-function finishEnroll() {
+function finishEnroll(minSamples = 5) {
   const e = enrolling; enrolling = null;
-  if (e.samples.length < 5) { setStatus('Enrollment failed: not enough clear face views. Try again with more light.', true); return; }
+  if (e.samples.length < minSamples) { setStatus('Enrollment failed: not enough clear face views. Try again with more light.', true); return; }
   const mean = e.samples[0].map((_, i) => e.samples.reduce((s, v) => s + v[i], 0) / e.samples.length);
   // If the duck already remembers this face as a stranger, promote that memory to owner.
   let p = mem.owner();
@@ -386,6 +386,12 @@ function renderHud(state, visible) {
   $('pupil').setAttribute('cy', 50 + state.gaze.y * 18);
   $('pupil').setAttribute('r', 10 + state.curiosity * 8); // pupils dilate when curious
   $('cmd').textContent = JSON.stringify(state.command);
+  // Owner status, so it's obvious whether the duck knows who to follow.
+  const own = mem.owner();
+  const ot = visible.find((t) => t.isOwner);
+  $('ownerStatus').textContent = !own ? '⚠️ No owner enrolled yet: press "Enroll my face" while your face is in view.'
+    : ot ? `✅ I see ${own.name} (by ${ot.kind === 'face' ? 'face' : 'outfit'})`
+    : `${own.name} not in view` + (visible.some((t) => t.kind === 'face' && t.committed) ? ' (I see a face but it is not a match: re-enroll if this is you)' : '');
   $('stats').textContent =
     `${stats.fps.toFixed(1)} fps · objects ${stats.det.toFixed(0)} ms · faces ${stats.face.toFixed(0)} ms · fingerprints ${stats.emb.toFixed(0)} ms\n` +
     `MediaPipe ${vision.delegate} · face-api ${vision.faceBackend} · ${visible.length} tracked · ${mem.protos.size} remembered · scene change ${(brain.scene.change * 100).toFixed(0)}% (${state.selfMoving ? 'ignored, I am moving' : 'watching'}) · link ${sink.status}`;
@@ -512,6 +518,42 @@ const simButtons = {
   simStranger: () => sim.toggleStranger(),
 };
 for (const [id, fn] of Object.entries(simButtons)) $(id).onclick = fn;
+// Enroll from photos: no camera needed, and the photos never leave the phone/PC
+// (they're read by the page itself, turned into face fingerprints, then dropped).
+$('enrollPhotos').onchange = async (ev) => {
+  const files = [...ev.target.files];
+  if (!files.length) return;
+  if (!realVision.detector) { setStatus('Face models are not loaded, cannot enroll from photos.', true); return; }
+  const c = document.createElement('canvas');
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  const samples = [];
+  let thumb = '', skipped = 0;
+  for (const f of files) {
+    setStatus(`Reading photo ${samples.length + skipped + 1}/${files.length}…`);
+    try {
+      const bmp = await createImageBitmap(f);
+      const k = Math.min(1, 800 / Math.max(bmp.width, bmp.height));
+      c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+      ctx.drawImage(bmp, 0, 0, c.width, c.height);
+      bmp.close();
+      const faces = (await realVision.detectFaces(c)).sort((a, b) => b.box.w * b.box.h - a.box.w * a.box.h);
+      const r = faces[0] && (await realVision.describeFace(c, faces[0].box));
+      if (!r) { skipped++; continue; }
+      samples.push(r.emb);
+      if (!thumb) {
+        const b = faces[0].box, sz = Math.max(b.w, b.h);
+        thumbCtx.fillStyle = '#000'; thumbCtx.fillRect(0, 0, 64, 64);
+        thumbCtx.drawImage(c, b.x + b.w / 2 - sz / 2, b.y + b.h / 2 - sz / 2, sz, sz, 0, 0, 64, 64);
+        thumb = thumbC.toDataURL('image/jpeg', 0.7);
+      }
+    } catch (err) { skipped++; }
+  }
+  ev.target.value = '';
+  if (samples.length < 3) { setStatus(`Only ${samples.length} usable face(s) found (${skipped} photos skipped). Use at least 3 clear photos of just you.`, true); return; }
+  enrolling = { name: $('ownerName').value.trim() || 'Hunter', samples, thumb };
+  finishEnroll(3);
+  if (skipped) setStatus($('status').textContent + ` (${skipped} photo(s) had no usable face.)`);
+};
 $('wsConnect').onclick = () => sink.connect($('wsUrl').value.trim());
 
 boot();

@@ -112,10 +112,13 @@ export class SimWorld {
     for (const it of this.items) if (it.kind !== 'person') it.angle = this.viewCenter() + (Math.random() * 2 - 1) * 60;
   }
   makePerson(name, isHunter) {
+    // Sim Hunter always has the SAME face (fixed seeds), so the duck's saved memory
+    // of him still matches after a page reload. Strangers are random every time.
+    const sd = isHunter ? (n) => 777000 + n : () => seedCounter++;
     return {
       id: seedCounter++, kind: 'person', name, isHunter,
       angle: this.viewCenter() + (Math.random() * 2 - 1) * 20, dist: 2.2, away: false, smile: false,
-      faceVec: randVec(128), shirt: pick(SHIRTS), outfitVec: randVec(1024), frontVec: randVec(1024), backVec: randVec(1024),
+      faceVec: randVec(128, sd(1)), shirt: isHunter ? SHIRTS[0] : pick(SHIRTS), outfitVec: randVec(1024, sd(2)), frontVec: randVec(1024, sd(3)), backVec: randVec(1024, sd(4)),
       skin: isHunter ? '#e0ac69' : pick(['#8d5524', '#f1c27d', '#c68642']), hair: isHunter ? '#3b2314' : pick(['#111', '#b45309', '#d4d4d4']),
     };
   }
