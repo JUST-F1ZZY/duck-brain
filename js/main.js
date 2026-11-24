@@ -4,6 +4,7 @@
 
 import { VideoSource } from './video-source.js';
 import { Vision } from './vision.js';
+import { SimWorld } from './sim.js';
 import { Tracker } from './tracker.js';
 import { Memory, dot } from './memory.js';
 import { Brain, DEFAULTS } from './curiosity.js';
@@ -18,8 +19,13 @@ try { Object.assign(settings, JSON.parse(localStorage.getItem('duck-settings') |
 const saveSettings = () => { try { localStorage.setItem('duck-settings', JSON.stringify(settings)); } catch (e) { /* ignore */ } };
 
 const mem = new Memory();
-const vision = new Vision();
-const src = new VideoSource();
+// Real eyes, or the sim world's fake eyes. Everything else is shared.
+const realVision = new Vision();
+const camSrc = new VideoSource();
+const sim = new SimWorld();
+let vision = realVision;
+let src = camSrc;
+let simLast = 0;
 const tracker = new Tracker();
 const brain = new Brain(mem, settings);
 const sink = new CommandSink();
@@ -54,20 +60,26 @@ async function boot() {
   await mem.load();
   renderMemory();
   try {
-    await vision.init(setStatus);
-    $('start').disabled = false;
-    setStatus(`Ready. Vision: MediaPipe ${vision.delegate}, faces ${vision.faceBackend}. Pick a source and press Start.`);
+    await realVision.init(setStatus);
+    setStatus(`Ready. Vision: MediaPipe ${realVision.delegate}, faces ${realVision.faceBackend}. Pick a source and press Start.`);
   } catch (e) {
     console.error(e);
-    setStatus('Model load failed: ' + e.message, true);
+    setStatus('Model load failed: ' + e.message + ' (Sim world still works.)', true);
   }
+  $('start').disabled = false;
 }
 
 // ---------- start / stop ----------
 async function start() {
   try {
     setStatus('Starting video…');
-    await src.start($('source').value, $('url').value.trim(), $('file').files[0]);
+    const kind = $('source').value;
+    if (kind === 'sim') { src = sim.source; vision = sim.vision; }
+    else {
+      if (!realVision.detector) throw new Error('Vision models did not load, only Sim world is available.');
+      src = camSrc; vision = realVision;
+    }
+    await src.start(kind, $('url').value.trim(), $('file').files[0]);
     proc.width = view.width = PROC_W;
     proc.height = view.height = Math.round((PROC_W * src.height) / src.width);
     running = true;
@@ -130,6 +142,11 @@ async function frame() {
   events.update(visible, now);
   const state = brain.tick(visible, W, H, now);
   lastState = state;
+  if (src === sim.source) {
+    sim.step(state.command, simLast ? Math.min(0.5, (now - simLast) / 1000) : 0);
+    simLast = now;
+    sim.drawStrip($('simStrip'));
+  }
   sink.send(state.command);
 
   draw(state, visible);
@@ -451,6 +468,7 @@ $('source').onchange = () => {
   const v = $('source').value;
   $('urlRow').hidden = !['mjpeg', 'snapshot', 'video'].includes(v);
   $('fileRow').hidden = v !== 'file';
+  $('simPanel').hidden = v !== 'sim';
 };
 $('source').onchange();
 $('export').onclick = () => {
@@ -474,6 +492,21 @@ window.addEventListener('devicemotion', (e) => {
   const r = e.rotationRate;
   brain.deviceRate = r && src.kind?.startsWith('camera') ? Math.hypot(r.alpha || 0, r.beta || 0, r.gamma || 0) : 0;
 });
+// Sim world buttons
+const simButtons = {
+  simAdd: () => sim.addObject(),
+  simRemove: () => sim.removeObject(),
+  simBack: () => { if (!sim.bringBack()) setStatus('Nothing removed yet: press "Remove an object" first.'); },
+  simGadget: () => sim.addGadget(),
+  simShuffle: () => sim.shuffle(),
+  simHunter: () => sim.toggleHunter(),
+  simTurn: () => sim.hunterTurn(),
+  simSmile: () => sim.hunterSmile(),
+  simShirt: () => sim.hunterShirt(),
+  simWander: () => { sim.hunterWander = !sim.hunterWander; },
+  simStranger: () => sim.toggleStranger(),
+};
+for (const [id, fn] of Object.entries(simButtons)) $(id).onclick = fn;
 $('wsConnect').onclick = () => sink.connect($('wsUrl').value.trim());
 
 boot();

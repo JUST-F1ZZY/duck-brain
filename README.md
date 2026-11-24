@@ -12,6 +12,13 @@ Everything (libraries, wasm, models, ~31 MB) is in this folder, so it also works
 - **Gaze**: picks the most interesting thing (with hysteresis), shows a pink reticle + duck eye, and builds the command the robot would get (`head.yaw/pitch`, `walk.vx/wz`, `mode`).
 - **Owner**: "Enroll my face" takes 16 face samples; afterwards the duck labels you ★ and follows you when nothing new is around.
 
+## Sim world (no camera needed)
+Pick **Sim world** in the source dropdown and press Start. The camera is replaced by a fake room, but the brain
+(tracker, memory, novelty, boredom, owner face + outfit matching, self-motion) is the real code. The brain's head/turn
+commands rotate the view and "walk" makes things in front bigger. Buttons add/remove/bring back objects, drop a non-COCO
+gadget, bring Hunter in, turn him around, make him smile, change his shirt, make him walk around, or add a stranger.
+Works on plain http too (no camera permission involved), e.g. `python -m http.server` on the PC.
+
 ## Run it
 
 Camera access needs **HTTPS or localhost**. That's a browser rule, not this code.

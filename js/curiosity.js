@@ -144,7 +144,8 @@ export class Brain {
     // Boredom slowly recovers for everything (≈1 minute).
     for (const [k, v] of this.exposure) {
       const nv = v * Math.exp(-dt / 60);
-      if (nv < 0.05) this.exposure.delete(k); else this.exposure.set(k, nv);
+      // Tiny threshold on purpose: at 60 fps one frame only adds 0.016 s of staring.
+      if (nv < 0.001) this.exposure.delete(k); else this.exposure.set(k, nv);
     }
 
     let best = null, bestScore = 0, current = null, currentScore = 0;
@@ -216,7 +217,9 @@ export class Brain {
     let headRate = 0;
     if (this.lastHead && dt > 0) headRate = (Math.abs(cmd.head.yaw - this.lastHead.yaw) + Math.abs(cmd.head.pitch - this.lastHead.pitch)) / dt;
     this.lastHead = cmd.head;
-    const moving = headRate > 0.15 || cmd.walk.vx !== 0 || cmd.walk.wz !== 0 || this.deviceRate > 15;
+    // Smooth over ~0.3 s so tiny frame-to-frame jitter at high fps doesn't count as moving.
+    this.headRateS = (this.headRateS || 0) + (headRate - (this.headRateS || 0)) * clamp(dt / 0.3);
+    const moving = this.headRateS > 0.15 || cmd.walk.vx !== 0 || cmd.walk.wz !== 0 || this.deviceRate > 15;
     if (moving) this.stillSince = now;
     this.selfMoving = now - this.stillSince < 700;
   }

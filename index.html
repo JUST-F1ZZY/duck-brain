@@ -61,6 +61,7 @@
 
 <div class="row">
   <select id="source">
+    <option value="sim">Sim world (no camera needed)</option>
     <option value="camera-back">Phone camera (back)</option>
     <option value="camera-front">Phone camera (front)</option>
     <option value="mjpeg">MJPEG stream URL (Pi)</option>
@@ -73,6 +74,23 @@
 </div>
 <div class="row" id="urlRow" hidden><input id="url" type="url" placeholder="http://duck.local:8080/stream.mjpg"></div>
 <div class="row" id="fileRow" hidden><input id="file" type="file" accept="video/*"></div>
+
+<details id="simPanel" open hidden>
+  <summary>Sim world</summary>
+  <canvas id="simStrip" width="720" height="56" style="width:100%;border-radius:6px;display:block;margin:6px 0"></canvas>
+  <div class="row">
+    <button id="simAdd">+ New object</button><button id="simRemove">Remove an object</button>
+    <button id="simBack">Bring an old one back</button><button id="simShuffle">Move things around</button>
+    <button id="simGadget">+ Unknown gadget</button>
+  </div>
+  <div class="row">
+    <button id="simHunter">Hunter in / out</button><button id="simTurn">Hunter turns around</button>
+    <button id="simSmile">Hunter smiles</button><button id="simShirt">Hunter changes shirt</button>
+    <button id="simWander">Hunter walks around</button><button id="simStranger">Stranger in / out</button>
+  </div>
+  <pre>The camera view above is the duck's eye in a fake room. The brain is the real one: its head commands turn the view.
+Try: bring Hunter in, Enroll, then turn him around, change his shirt, add a stranger.</pre>
+</details>
 
 <details open>
   <summary>Owner</summary>
