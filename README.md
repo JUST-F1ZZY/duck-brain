@@ -39,6 +39,15 @@ cd duck-brain && python -m http.server 8000
 `http://192.168.x.x:8000` is not secure, so the camera is blocked. Workaround: on the phone open
 `chrome://flags/#unsafely-treat-insecure-origin-as-secure`, add `http://192.168.x.x:8000`, relaunch Chrome.
 
+## Following Hunter (face and/or body)
+- **Face** = long-term identity (enroll once).
+- **Body** = today's outfit. Whenever your face is recognised inside a person box, the duck saves a fingerprint of your torso
+  (MobileNet shape vector + colour histogram). With your back turned, a person whose torso matches (≥ 0.82) is you, and it follows.
+  Once a person box was linked to you by face, it stays you while tracked, even if you turn around.
+- Outfit memory expires after 12 h (clothes change). After enrolling, stand back for a few seconds so it sees your whole body.
+- Limits: someone in a very similar outfit can be mistaken for you; a jacket on/off breaks the match until it sees your face again.
+  In a fake-camera test the same outfit seen without a face scored 0.84, a different person 0.21.
+
 ## Using it
 1. Start → point at stuff. Green boxes = objects, blue = faces, yellow = owner. `NEW` = not in memory.
 2. Front camera at yourself → **Enroll my face** → slowly turn your head for ~5 s.
