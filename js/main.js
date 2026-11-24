@@ -369,7 +369,7 @@ function renderHud(state, visible) {
   $('cmd').textContent = JSON.stringify(state.command);
   $('stats').textContent =
     `${stats.fps.toFixed(1)} fps · objects ${stats.det.toFixed(0)} ms · faces ${stats.face.toFixed(0)} ms · fingerprints ${stats.emb.toFixed(0)} ms\n` +
-    `MediaPipe ${vision.delegate} · face-api ${vision.faceBackend} · ${visible.length} tracked · ${mem.protos.size} remembered · scene change ${(brain.scene.change * 100).toFixed(0)}% · link ${sink.status}`;
+    `MediaPipe ${vision.delegate} · face-api ${vision.faceBackend} · ${visible.length} tracked · ${mem.protos.size} remembered · scene change ${(brain.scene.change * 100).toFixed(0)}% (${state.selfMoving ? 'ignored, I am moving' : 'watching'}) · link ${sink.status}`;
 }
 
 // ---------- memory panel ----------
@@ -469,6 +469,11 @@ $('forgetAll').onclick = async () => {
   await mem.clear();
   for (const t of tracker.tracks) { t.committed = false; t.protoId = null; t.isOwner = false; t.name = ''; }
 };
+// Phone gyro: while the Pixel's own camera is the eye, moving the phone = the duck moving.
+window.addEventListener('devicemotion', (e) => {
+  const r = e.rotationRate;
+  brain.deviceRate = r && src.kind?.startsWith('camera') ? Math.hypot(r.alpha || 0, r.beta || 0, r.gamma || 0) : 0;
+});
 $('wsConnect').onclick = () => sink.connect($('wsUrl').value.trim());
 
 boot();

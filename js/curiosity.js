@@ -41,6 +41,13 @@ export class Brain {
     this.curiosity = 0;
     this.lastT = performance.now();
     this.scene = { emb: null, change: 0 };
+    // Self-motion ("efference copy"): the brain knows when it is moving its own
+    // head/body, so it doesn't mistake its own motion for "the world changed".
+    this.deviceRate = 0;      // phone gyro, deg/s (set by main.js while the phone camera is the eye)
+    this.lastHead = null;
+    this.stillSince = performance.now();
+    this.selfMoving = false;
+    this.idle = { x: 0, y: 0, until: 0 };
   }
 
   key(t) { return t.protoId || 't' + t.id; }
@@ -117,7 +124,11 @@ export class Brain {
   }
 
   // Scene fingerprint every ~second: big jumps = "something changed" (lamp on, thing moved).
+  // While the duck is moving (or just stopped), the view changes because of US,
+  // so just re-baseline: "this is what the world looks like from here now".
+  // Real "something changed" is only judged while the head has been still.
   observeScene(emb) {
+    if (this.selfMoving) { this.scene.emb = emb; this.scene.change = 0; return; }
     if (this.scene.emb) {
       let d = 0; for (let i = 0; i < emb.length; i++) d += emb[i] * this.scene.emb[i];
       this.scene.change = clamp(1 - d);
@@ -173,7 +184,10 @@ export class Brain {
       const cy = target.kind === 'body' ? target.box.y + target.box.h * 0.15 : target.box.y + target.box.h / 2; // look at the head
       gy = (cy / H) * 2 - 1;
     } else {
-      gx = 0.6 * Math.sin(now / 2500); gy = 0.15 * Math.sin(now / 1700);
+      // Idle scan in hops (look, hold ~2.5 s, look elsewhere) instead of a constant
+      // sweep: the holds are when the duck can notice that something changed.
+      if (now > this.idle.until) this.idle = { x: (Math.random() * 2 - 1) * 0.6, y: (Math.random() * 2 - 1) * 0.15, until: now + 2500 };
+      gx = this.idle.x; gy = this.idle.y;
     }
     const k = clamp(dt * 5);
     this.gaze.x += (gx - this.gaze.x) * k;
@@ -190,7 +204,21 @@ export class Brain {
       else mode = 'bored';
     }
 
-    return { target, mode, curiosity: this.curiosity, gaze: { ...this.gaze }, command: this.command(target, mode, W, H) };
+    const command = this.command(target, mode, W, H);
+    this.updateSelfMotion(command, dt, now);
+    return { target, mode, curiosity: this.curiosity, gaze: { ...this.gaze }, command, selfMoving: this.selfMoving };
+  }
+
+  // Moving = head turning faster than ~9°/s, walking, or (phone prototype) the
+  // phone itself rotating > 15°/s. Stay "moving" for 0.7 s after stopping so the
+  // camera image can settle (motion blur, auto-exposure).
+  updateSelfMotion(cmd, dt, now) {
+    let headRate = 0;
+    if (this.lastHead && dt > 0) headRate = (Math.abs(cmd.head.yaw - this.lastHead.yaw) + Math.abs(cmd.head.pitch - this.lastHead.pitch)) / dt;
+    this.lastHead = cmd.head;
+    const moving = headRate > 0.15 || cmd.walk.vx !== 0 || cmd.walk.wz !== 0 || this.deviceRate > 15;
+    if (moving) this.stillSince = now;
+    this.selfMoving = now - this.stillSince < 700;
   }
 
   // Suggested command for the robot. The Pi side maps this to the policy inputs

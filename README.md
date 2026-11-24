@@ -48,6 +48,11 @@ cd duck-brain && python -m http.server 8000
 - Limits: someone in a very similar outfit can be mistaken for you; a jacket on/off breaks the match until it sees your face again.
   In a fake-camera test the same outfit seen without a face scored 0.84, a different person 0.21.
 
+## Ignoring its own motion
+"Something changed" in the whole view is only judged while the duck's head has been still for 0.7 s. While it turns its head,
+walks, or (phone prototype) the Pixel's gyro says the phone is rotating, the scene baseline is just reset, so its own motion
+never counts as novelty. The idle scan hops and holds (≈2.5 s) instead of sweeping, which gives it still moments to notice changes.
+
 ## Using it
 1. Start → point at stuff. Green boxes = objects, blue = faces, yellow = owner. `NEW` = not in memory.
 2. Front camera at yourself → **Enroll my face** → slowly turn your head for ~5 s.
