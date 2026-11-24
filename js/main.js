@@ -365,6 +365,8 @@ const MOODS = {
   glance: '👀 mildly curious',
   inspect: '🤩 very curious, going to inspect',
   follow_owner: '🧡 following',
+  glance_follow: '🧡👀 following, glancing at something new',
+  search_owner: '🔎 lost Hunter, looking for him',
 };
 
 let hudT = 0;
@@ -432,6 +434,9 @@ const SETTING_INFO = {
   boredomTau: ['Boredom time (s)', 1, 30, 0.5],
   revisitGapSec: ['New visit after (s)', 5, 600, 5],
   ownerFollowBias: ['Owner interest floor', 0, 1, 0.05],
+  glanceThreshold: ['Glance-away novelty (while following)', 0, 1, 0.05],
+  glanceSec: ['Max glance while following (s)', 0, 10, 0.5],
+  searchSec: ['Search for lost owner (s)', 0, 30, 1],
   switchMargin: ['Gaze switch margin', 0, 0.5, 0.01],
   bodyMatchSim: ['Body (outfit) match similarity', 0.5, 0.99, 0.01],
   bodyMemoryHours: ['Forget outfit after (h)', 1, 72, 1],

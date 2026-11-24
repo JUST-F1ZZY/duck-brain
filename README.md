@@ -55,6 +55,11 @@ cd duck-brain && python -m http.server 8000
 - Limits: someone in a very similar outfit can be mistaken for you; a jacket on/off breaks the match until it sees your face again.
   In a fake-camera test the same outfit seen without a face scored 0.84, a different person 0.21.
 
+## Owner first
+While Hunter is visible the duck's body always follows him. Its head may glance at something new only if it's quite novel
+(> 0.6), for at most 2.5 s, then 4 s cooldown. If he disappears, it turns/looks toward where he was for 6 s before wandering.
+Sim test (Hunter walking around, a new object every 4 s): Hunter stayed in view 100% of the time (old logic: 57%).
+
 ## Ignoring its own motion
 "Something changed" in the whole view is only judged while the duck's head has been still for 0.7 s. While it turns its head,
 walks, or (phone prototype) the Pixel's gyro says the phone is rotating, the scene baseline is just reset, so its own motion

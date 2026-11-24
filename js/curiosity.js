@@ -23,6 +23,9 @@ export const DEFAULTS = {
   boredomTau: 5,         // seconds of staring to get ~63% bored
   revisitGapSec: 20,     // a sighting counts as a new "visit" after this gap
   ownerFollowBias: 0.35, // minimum interest in the owner
+  glanceThreshold: 0.6,  // while following, only things this novel get a glance
+  glanceSec: 2.5,        // max glance length (then 4 s cooldown) while following
+  searchSec: 6,          // after losing the owner, search this long before wandering
   switchMargin: 0.15,    // hysteresis for changing gaze target
   bodyMatchSim: 0.82,    // clothing-fingerprint similarity to call a body "owner"
   bodyMemoryHours: 12,   // outfits change, so body samples expire
@@ -170,9 +173,39 @@ export class Brain {
       if (score > bestScore) { bestScore = score; best = t; }
       if (this.key(t) === this.targetKey) { current = t; currentScore = score; }
     }
-    // Hysteresis.
-    let target = best;
-    if (current && best !== current && bestScore < currentScore + this.s.switchMargin) target = current;
+    // ---- Owner first ----------------------------------------------------------
+    // Following Hunter is the duck's main job; curiosity is a side quest.
+    // While Hunter is visible, the BODY always follows him. The HEAD may glance at
+    // something new, but only if it's really novel, only for a few seconds, and
+    // with a cooldown between glances. If Hunter disappears, the duck searches
+    // where it last saw him before getting distracted again.
+    const owners = visible.filter((t) => t.isOwner && !(t.kind === 'body' && t.hasFace));
+    const owner = owners.sort((p, q) => (q.kind === 'face') - (p.kind === 'face') || q.box.w * q.box.h - p.box.w * p.box.h)[0] || null;
+    let target, mode, bodyTarget = null;
+    if (owner) {
+      this.lastOwner = { x: ((owner.box.x + owner.box.w / 2) / W) * 2 - 1, t: now };
+      bodyTarget = owner;
+      const others = visible.filter((t) => !t.isOwner && t.interest > 0);
+      const cand = others.sort((p, q) => q.gazeScore - p.gazeScore)[0];
+      const g = this.glance;
+      const glancing = g && now < g.until && visible.find((t) => this.key(t) === g.key);
+      if (glancing) target = glancing;
+      else if (cand && cand.interest > this.s.glanceThreshold && (!g || now > g.cooldownUntil)) {
+        this.glance = { key: this.key(cand), until: now + this.s.glanceSec * 1000, cooldownUntil: now + (this.s.glanceSec + 4) * 1000 };
+        target = cand;
+      } else target = owner;
+      mode = target === owner ? 'follow_owner' : 'glance_follow';
+    } else if (this.lastOwner && now - this.lastOwner.t < this.s.searchSec * 1000) {
+      // Just lost him: look/turn toward where he was, ignore mild novelty.
+      const cand = visible.filter((t) => t.interest > 0.85).sort((p, q) => q.gazeScore - p.gazeScore)[0];
+      target = cand || null;
+      mode = cand ? 'inspect' : 'search_owner';
+    } else {
+      // Nobody to follow: normal curiosity, with hysteresis so the head doesn't twitch.
+      target = best;
+      if (current && best !== current && bestScore < currentScore + this.s.switchMargin) target = current;
+      mode = null;
+    }
     this.targetKey = target ? this.key(target) : null;
 
     // Stare = get bored.
@@ -184,6 +217,8 @@ export class Brain {
       gx = ((target.box.x + target.box.w / 2) / W) * 2 - 1;
       const cy = target.kind === 'body' ? target.box.y + target.box.h * 0.15 : target.box.y + target.box.h / 2; // look at the head
       gy = (cy / H) * 2 - 1;
+    } else if (mode === 'search_owner') {
+      gx = clamp(this.lastOwner.x * 1.3, -1, 1); gy = 0;
     } else {
       // Idle scan in hops (look, hold ~2.5 s, look elsewhere) instead of a constant
       // sweep: the holds are when the duck can notice that something changed.
@@ -197,19 +232,19 @@ export class Brain {
     const want = target ? target.interest : this.scene.change * 2;
     this.curiosity += (clamp(want) - this.curiosity) * clamp(dt * 1.5);
 
-    let mode = 'wander';
-    if (target) {
-      if (target.isOwner && target.interest <= this.s.ownerFollowBias + 0.05) mode = 'follow_owner';
-      else if (this.curiosity > 0.55) mode = 'inspect';
-      else if (this.curiosity > 0.2) mode = 'glance';
-      else mode = 'bored';
+    if (!mode) {
+      mode = 'wander';
+      if (target) {
+        if (this.curiosity > 0.55) mode = 'inspect';
+        else if (this.curiosity > 0.2) mode = 'glance';
+        else mode = 'bored';
+      }
     }
 
-    const command = this.command(target, mode, W, H);
+    const command = this.command(target, mode, W, H, bodyTarget);
     this.updateSelfMotion(command, dt, now);
     return { target, mode, curiosity: this.curiosity, gaze: { ...this.gaze }, command, selfMoving: this.selfMoving };
   }
-
   // Moving = head turning faster than ~9°/s, walking, or (phone prototype) the
   // phone itself rotating > 15°/s. Stay "moving" for 0.7 s after stopping so the
   // camera image can settle (motion blur, auto-exposure).
@@ -227,7 +262,7 @@ export class Brain {
   // Suggested command for the robot. The Pi side maps this to the policy inputs
   // (head yaw/pitch + walk velocity). Sign convention: yaw + = look LEFT (ROS style),
   // pitch + = look DOWN. Flip on the Pi if the duck looks the wrong way.
-  command(target, mode, W, H) {
+  command(target, mode, W, H, bodyTarget = null) {
     const half = (this.s.hfovDeg * Math.PI) / 360;
     const vhalf = half * (H / W);
     const cmd = {
@@ -236,12 +271,18 @@ export class Brain {
       walk: { vx: 0, wz: 0 },
       curiosity: +this.curiosity.toFixed(2),
     };
-    if (target && (mode === 'inspect' || mode === 'follow_owner')) {
-      const area = (target.box.w * target.box.h) / (W * H);
-      // How big the target should look before the duck stops walking toward it.
-      const closeEnough = target.kind === 'body' ? 0.2 : mode === 'inspect' ? 0.08 : 0.03;
-      if (Math.abs(this.gaze.x) > 0.35) cmd.walk.wz = +(-this.gaze.x * 0.6).toFixed(2); // turn body toward it
-      else if (area < closeEnough) cmd.walk.vx = 0.15;                                    // walk up to it
+    // What the BODY walks toward: the owner while he's visible (even during a
+    // head glance), otherwise whatever is being inspected.
+    const goal = bodyTarget || (mode === 'inspect' ? target : null);
+    if (goal) {
+      const gxGoal = ((goal.box.x + goal.box.w / 2) / W) * 2 - 1;
+      const area = (goal.box.w * goal.box.h) / (W * H);
+      // How big it should look before the duck stops walking toward it.
+      const closeEnough = goal.kind === 'body' ? 0.2 : goal.isOwner ? 0.03 : 0.08;
+      if (Math.abs(gxGoal) > 0.35) cmd.walk.wz = +(-gxGoal * 0.6).toFixed(2); // turn body toward it
+      else if (area < closeEnough) cmd.walk.vx = 0.15;                        // walk up to it
+    } else if (mode === 'search_owner' && Math.abs(this.lastOwner.x) > 0.3) {
+      cmd.walk.wz = +(-Math.sign(this.lastOwner.x) * 0.6).toFixed(2);        // turn the way he went
     }
     return cmd;
   }
